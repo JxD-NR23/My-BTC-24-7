@@ -71,7 +71,7 @@ def job_check_10pct():
             last_alert_price = price
 
 scheduler = BackgroundScheduler(timezone=TZ)
-for h in [8][13][18][23]:
+for h in [8,13,18,23]:
     scheduler.add_job(lambda h=h: job_scheduled(with_chart=(h in [8][23])), 'cron', hour=h, minute=0)
 scheduler.add_job(job_check_10pct, 'interval', minutes=5)
 scheduler.start()
