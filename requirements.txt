@@ -1,4 +1,3 @@
 requests
 Flask
 APScheduler
-matplotlib
