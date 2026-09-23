@@ -2,3 +2,4 @@ Flask
 requests
 APScheduler
 gunicorn
+matplotlib
