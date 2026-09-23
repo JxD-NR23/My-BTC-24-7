@@ -1,8 +1,11 @@
 import os, requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from flask import Flask
+from flask import Flask, request # NUEVO: añadido request para escuchar
 from apscheduler.schedulers.background import BackgroundScheduler
+import matplotlib # NUEVO
+matplotlib.use('Agg') # NUEVO: para dibujar sin pantalla en Render
+import matplotlib.pyplot as plt # NUEVO
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN","").strip()
 CHAT_ID = os.environ.get("CHAT_ID","").strip()
@@ -20,25 +23,36 @@ def test():
     job_scheduled(True)
     return "Test enviado! Mira los Logs de Render y Telegram"
 
-def send_text(msg):
+def send_text(msg, chat_id=None): # NUEVO: ahora acepta chat_id para responder a quien escribe
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         print(f">>> Enviando a Telegram: {url[:50]}...", flush=True)
         r = requests.post(url,
-            json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown", "disable_web_page_preview": True}, timeout=20)
+            json={"chat_id": chat_id or CHAT_ID, "text": msg, "parse_mode": "Markdown", "disable_web_page_preview": True}, timeout=20)
         print(f">>> Telegram status {r.status_code} respuesta: {r.text[:500]}", flush=True)
         return True
     except Exception as e:
         print(f">>> ERROR Telegram EXCEPCION: {e}", flush=True)
         return False
 
-def get_price():
-    # Intento 1: CoinGecko (no bloquea Render)
+# NUEVO: funcion para mandar foto del grafico
+def send_photo(photo_path, caption="", chat_id=None):
     try:
-        j = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=15).json()
+        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+        with open(photo_path, 'rb') as f:
+            r = requests.post(url, data={"chat_id": chat_id or CHAT_ID, "caption": caption, "parse_mode": "Markdown"}, files={"photo": f}, timeout=30)
+        print(f">>> Foto enviada status {r.status_code}", flush=True)
+    except Exception as e:
+        print(f">>> Error foto: {e}", flush=True)
+
+def get_price():
+    # Intento 1: CoinGecko ahora con % 24h - NUEVO
+    try:
+        j = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true", timeout=15).json()
         p = float(j["bitcoin"]["usd"])
-        print(f">>> Precio CoinGecko OK: {p}", flush=True)
-        return p
+        ch = float(j["bitcoin"].get("usd_24h_change", 0))
+        print(f">>> Precio CoinGecko OK: {p} {ch:.2f}%", flush=True)
+        return p, ch # NUEVO: ahora devuelve 2 valores
     except Exception as e:
         print(f">>> Error CoinGecko: {e}", flush=True)
     # Intento 2: Kraken
@@ -46,10 +60,10 @@ def get_price():
         j = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=15).json()
         p = float(j["result"]["XXBTZUSD"]["c"][0])
         print(f">>> Precio Kraken OK: {p}", flush=True)
-        return p
+        return p, 0.0 # NUEVO: si usa Kraken, % = 0
     except Exception as e:
         print(f">>> Error Kraken: {e}", flush=True)
-    return None
+    return None, 0.0
 
 def get_sentiment():
     try:
@@ -58,17 +72,78 @@ def get_sentiment():
         return f"{emoji} Fear & Greed {v}/100 ({d['value_classification']})"
     except: return "Sentimiento: --"
 
+# NUEVO: genera imagen real de velas
+def build_chart_image():
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc?vs_currency=usd&days=1"
+        data = requests.get(url, timeout=15).json()
+        if not data or len(data) < 5: return None
+        times = [datetime.fromtimestamp(x[0]/1000, tz=TZ) for x in data]
+        opens = [x[1] for x in data]; highs = [x[2] for x in data]; lows = [x[3] for x in data]; closes = [x[4] for x in data]
+        plt.figure(figsize=(8,4))
+        for i in range(len(data)):
+            color = 'green' if closes[i] >= opens[i] else 'red'
+            plt.plot([times[i], times[i]], [lows[i], highs[i]], color=color, linewidth=1)
+            plt.plot([times[i], times[i]], [opens[i], closes[i]], color=color, linewidth=4)
+        plt.title("BTC/USD 24h - velas 1h")
+        plt.grid(alpha=0.3)
+        plt.xticks(rotation=20)
+        plt.tight_layout()
+        path = "/tmp/btc_chart.png"
+        plt.savefig(path)
+        plt.close()
+        return path
+    except Exception as e:
+        print(f">>> Error chart: {e}", flush=True)
+        return None
+
 def job_scheduled(with_chart=False):
     print(f">>> job_scheduled INICIADO chart={with_chart} {datetime.now(TZ)}", flush=True)
-    price=get_price()
+    price, change = get_price() # NUEVO: ahora recibe 2 valores
     if not price:
         print(">>> Fallo total obteniendo precio, envio mensaje de error", flush=True)
         send_text("⚠️ Bot BTC: no pude obtener el precio (API caida)")
         return
     sentiment=get_sentiment()
-    chart="\n\n📈 [Ver grafico 24h](https://www.coingecko.com/en/coins/bitcoin)" if with_chart else ""
-    msg = f"₿ *BTC: ${price:,.2f}*\n{sentiment}\n📅 {datetime.now(TZ).strftime('%d/%m %H:%M')} España{chart}"
+    # NUEVO: texto de variacion %
+    sign = "📈" if change >=0 else "📉"
+    change_txt = f"{sign} {change:+.2f}% 24h"
+
+    msg = f"₿ *BTC: ${price:,.2f}* ({change_txt})\n{sentiment}\n📅 {datetime.now(TZ).strftime('%d/%m %H:%M')} España"
     send_text(msg)
+
+    if with_chart: # NUEVO: a las 8 y 23 manda foto real
+        chart_path = build_chart_image()
+        if chart_path:
+            send_photo(chart_path, f"📊 BTC ${price:,.2f} {change:+.2f}% 24h")
+
+# NUEVO: para que conteste cuando le hablas
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    try:
+        data = request.get_json()
+        if "message" in data and "text" in data["message"]:
+            chat_id = data["message"]["chat"]["id"]
+            text = data["message"]["text"].lower()
+            print(f">>> Mensaje recibido: {text}", flush=True)
+            if "/start" in text or "hola" in text or "/help" in text:
+                send_text("🤖 *Bot BTC*\n/precio - precio ahora\n/grafico - velas 24h", chat_id=chat_id)
+            elif "precio" in text:
+                p,c = get_price()
+                send_text(f"₿ *BTC ahora: ${p:,.2f}*\n📈 {c:+.2f}% 24h", chat_id=chat_id)
+            elif "grafico" in text or "gráfico" in text:
+                p,c = get_price()
+                path = build_chart_image()
+                if path:
+                    send_photo(path, f"₿ BTC ${p:,.2f} ({c:+.2f}%)", chat_id=chat_id)
+                else:
+                    send_text("No pude generar grafico", chat_id=chat_id)
+            else:
+                p,c = get_price()
+                send_text(f"Escribe /precio o /grafico\nBTC ahora ${p:,.2f}", chat_id=chat_id)
+    except Exception as e:
+        print(f">>> Error webhook: {e}", flush=True)
+    return "ok", 200
 
 scheduler=BackgroundScheduler(timezone=TZ, daemon=True)
 scheduler.add_job(lambda: job_scheduled(True), 'cron', hour=8, minute=0, id="btc8")
@@ -76,7 +151,7 @@ scheduler.add_job(lambda: job_scheduled(False), 'cron', hour=13, minute=0, id="b
 scheduler.add_job(lambda: job_scheduled(False), 'cron', hour=18, minute=0, id="btc18")
 scheduler.add_job(lambda: job_scheduled(True), 'cron', hour=23, minute=0, id="btc23")
 scheduler.start()
-print(">>> Scheduler iniciado OK: 8,13,18,23", flush=True)
+print(">>> Scheduler iniciado OK: 8,13,18,23 + webhook", flush=True)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
