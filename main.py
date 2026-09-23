@@ -46,23 +46,42 @@ def send_photo(photo_path, caption="", chat_id=None):
         print(f">>> Error foto: {e}", flush=True)
 
 def get_price():
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
-        j = requests.get(url, timeout=15, headers=headers).json()
-        p = float(j["bitcoin"]["usd"])
-        ch = float(j["bitcoin"].get("usd_24h_change", 0))
-        print(f">>> CoinGecko OK: {p} {ch:.2f}%", flush=True)
-        return p, ch
-    except Exception as e:
-        print(f">>> Error CoinGecko: {e}", flush=True)
+    headers = {"User-Agent": "Mozilla/5.0"}
+    price = None
+    change = 0.0
+
+    # 1. Precio de Kraken (el mas fiable)
     try:
         j = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=15).json()
-        p = float(j["result"]["XXBTZUSD"]["c"][0])
-        return p, 0.0
+        price = float(j["result"]["XXBTZUSD"]["c"][0])
     except Exception as e:
-        print(f">>> Error Kraken: {e}", flush=True)
-    return None, 0.0
+        print(f">>> Error Kraken precio: {e}", flush=True)
+
+    # 2. % 24h de Binance (nunca falla)
+    try:
+        j = requests.get("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT", timeout=15, headers=headers).json()
+        change = float(j["priceChangePercent"])
+        if price is None:
+            price = float(j["lastPrice"])
+        print(f">>> Binance OK: {price} {change:.2f}%", flush=True)
+        return price, change
+    except Exception as e:
+        print(f">>> Error Binance: {e}", flush=True)
+
+    # 3. Si todo falla, intenta CoinGecko por ultimo
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
+        r = requests.get(url, timeout=15, headers=headers)
+        j = r.json()
+        if "bitcoin" in j:
+            p = float(j["bitcoin"]["usd"])
+            c = float(j["bitcoin"].get("usd_24h_change", 0))
+            if price is None: price = p
+            if c!= 0: change = c
+            return price, change
+    except: pass
+
+    return price, change
 
 def get_sentiment():
     try:
@@ -73,52 +92,38 @@ def get_sentiment():
 
 # NUEVO: genera imagen real de velas
 def build_chart_image():
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        # Intento 1: velas
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc?vs_currency=usd&days=1"
-        r = requests.get(url, timeout=15, headers=headers)
-        data = r.json()
-        if isinstance(data, list) and len(data) > 5:
-            times = [datetime.fromtimestamp(x[0]/1000, tz=TZ) for x in data]
-            opens = [x[1] for x in data]; highs = [x[2] for x in data]
-            lows = [x[3] for x in data]; closes = [x[4] for x in data]
-            plt.figure(figsize=(8,4))
-            for i in range(len(data)):
-                color = 'green' if closes[i] >= opens[i] else 'red'
-                plt.plot([times[i], times[i]], [lows[i], highs[i]], color=color, linewidth=1)
-                plt.plot([times[i], times[i]], [opens[i], closes[i]], color=color, linewidth=4)
-            plt.title("BTC 24h - velas 1h")
-            plt.grid(alpha=0.3)
-            plt.tight_layout()
-            path = "/tmp/btc.png"
-            plt.savefig(path)
-            plt.close()
-            print(">>> Grafico velas OK", flush=True)
-            return path
-    except Exception as e:
-        print(f">>> Error chart velas: {e}", flush=True)
-
-    # Intento 2: linea simple - este NUNCA falla
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1"
+        # Kraken OHLC 24h - 1 vela = 1 hora
+        url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=60"
         data = requests.get(url, timeout=15, headers=headers).json()
-        prices = data['prices']
-        times = [datetime.fromtimestamp(p[0]/1000, tz=TZ) for p in prices]
-        vals = [p[1] for p in prices]
+        ohlc = list(data["result"]["XXBTZUSD"])
+        # ultimas 24 velas
+        ohlc = ohlc[-24:]
+
+        times = [datetime.fromtimestamp(int(x[0]), tz=TZ) for x in ohlc]
+        opens = [float(x[1]) for x in ohlc]
+        highs = [float(x[2]) for x in ohlc]
+        lows = [float(x[3]) for x in ohlc]
+        closes = [float(x[4]) for x in ohlc]
+
         plt.figure(figsize=(8,4))
-        plt.plot(times, vals, linewidth=2)
-        plt.title("BTC 24h")
+        for i in range(len(ohlc)):
+            color = '#26a69a' if closes[i] >= opens[i] else '#ef5350'
+            plt.plot([times[i], times[i]], [lows[i], highs[i]], color=color, linewidth=1)
+            plt.plot([times[i], times[i]], [opens[i], closes[i]], color=color, linewidth=4)
+
+        plt.title("BTC 24h - Kraken 1h", fontsize=12, fontweight='bold')
         plt.grid(alpha=0.3)
+        plt.xticks(rotation=15)
         plt.tight_layout()
         path = "/tmp/btc.png"
-        plt.savefig(path)
+        plt.savefig(path, dpi=150)
         plt.close()
-        print(">>> Grafico linea OK", flush=True)
+        print(">>> Grafico Kraken OK", flush=True)
         return path
     except Exception as e:
-        print(f">>> Error chart linea: {e}", flush=True)
+        print(f">>> Error chart Kraken: {e}", flush=True)
     return None
 
 def job_scheduled(with_chart=False):
