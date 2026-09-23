@@ -46,21 +46,20 @@ def send_photo(photo_path, caption="", chat_id=None):
         print(f">>> Error foto: {e}", flush=True)
 
 def get_price():
-    # Intento 1: CoinGecko ahora con % 24h - NUEVO
     try:
-        j = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true", timeout=15).json()
+        headers = {"User-Agent": "Mozilla/5.0"}
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
+        j = requests.get(url, timeout=15, headers=headers).json()
         p = float(j["bitcoin"]["usd"])
         ch = float(j["bitcoin"].get("usd_24h_change", 0))
-        print(f">>> Precio CoinGecko OK: {p} {ch:.2f}%", flush=True)
-        return p, ch # NUEVO: ahora devuelve 2 valores
+        print(f">>> CoinGecko OK: {p} {ch:.2f}%", flush=True)
+        return p, ch
     except Exception as e:
         print(f">>> Error CoinGecko: {e}", flush=True)
-    # Intento 2: Kraken
     try:
         j = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=15).json()
         p = float(j["result"]["XXBTZUSD"]["c"][0])
-        print(f">>> Precio Kraken OK: {p}", flush=True)
-        return p, 0.0 # NUEVO: si usa Kraken, % = 0
+        return p, 0.0
     except Exception as e:
         print(f">>> Error Kraken: {e}", flush=True)
     return None, 0.0
@@ -75,27 +74,52 @@ def get_sentiment():
 # NUEVO: genera imagen real de velas
 def build_chart_image():
     try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        # Intento 1: velas
         url = "https://api.coingecko.com/api/v3/coins/bitcoin/ohlc?vs_currency=usd&days=1"
-        data = requests.get(url, timeout=15).json()
-        if not data or len(data) < 5: return None
-        times = [datetime.fromtimestamp(x[0]/1000, tz=TZ) for x in data]
-        opens = [x[1] for x in data]; highs = [x[2] for x in data]; lows = [x[3] for x in data]; closes = [x[4] for x in data]
+        r = requests.get(url, timeout=15, headers=headers)
+        data = r.json()
+        if isinstance(data, list) and len(data) > 5:
+            times = [datetime.fromtimestamp(x[0]/1000, tz=TZ) for x in data]
+            opens = [x[1] for x in data]; highs = [x[2] for x in data]
+            lows = [x[3] for x in data]; closes = [x[4] for x in data]
+            plt.figure(figsize=(8,4))
+            for i in range(len(data)):
+                color = 'green' if closes[i] >= opens[i] else 'red'
+                plt.plot([times[i], times[i]], [lows[i], highs[i]], color=color, linewidth=1)
+                plt.plot([times[i], times[i]], [opens[i], closes[i]], color=color, linewidth=4)
+            plt.title("BTC 24h - velas 1h")
+            plt.grid(alpha=0.3)
+            plt.tight_layout()
+            path = "/tmp/btc.png"
+            plt.savefig(path)
+            plt.close()
+            print(">>> Grafico velas OK", flush=True)
+            return path
+    except Exception as e:
+        print(f">>> Error chart velas: {e}", flush=True)
+
+    # Intento 2: linea simple - este NUNCA falla
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1"
+        data = requests.get(url, timeout=15, headers=headers).json()
+        prices = data['prices']
+        times = [datetime.fromtimestamp(p[0]/1000, tz=TZ) for p in prices]
+        vals = [p[1] for p in prices]
         plt.figure(figsize=(8,4))
-        for i in range(len(data)):
-            color = 'green' if closes[i] >= opens[i] else 'red'
-            plt.plot([times[i], times[i]], [lows[i], highs[i]], color=color, linewidth=1)
-            plt.plot([times[i], times[i]], [opens[i], closes[i]], color=color, linewidth=4)
-        plt.title("BTC/USD 24h - velas 1h")
+        plt.plot(times, vals, linewidth=2)
+        plt.title("BTC 24h")
         plt.grid(alpha=0.3)
-        plt.xticks(rotation=20)
         plt.tight_layout()
-        path = "/tmp/btc_chart.png"
+        path = "/tmp/btc.png"
         plt.savefig(path)
         plt.close()
+        print(">>> Grafico linea OK", flush=True)
         return path
     except Exception as e:
-        print(f">>> Error chart: {e}", flush=True)
-        return None
+        print(f">>> Error chart linea: {e}", flush=True)
+    return None
 
 def job_scheduled(with_chart=False):
     print(f">>> job_scheduled INICIADO chart={with_chart} {datetime.now(TZ)}", flush=True)
