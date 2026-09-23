@@ -50,36 +50,40 @@ def get_price():
     price = None
     change = 0.0
 
-    # 1. Precio de Kraken (el mas fiable)
+    # 1. Precio actual de Kraken
     try:
         j = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=15).json()
         price = float(j["result"]["XXBTZUSD"]["c"][0])
     except Exception as e:
         print(f">>> Error Kraken precio: {e}", flush=True)
 
-    # 2. % 24h de Binance (nunca falla)
+    # 2. % 24h calculado desde el OHLC de Kraken (100% fiable)
+    try:
+        j = requests.get("https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440", timeout=15).json()
+        # intervalo 1440 = 1 dia
+        candles = list(j["result"]["XXBTZUSD"])
+        if len(candles) >= 2:
+            close_hoy = float(candles[-1][4])
+            close_ayer = float(candles[-2][4])
+            change = ((close_hoy - close_ayer) / close_ayer) * 100
+            if price is None:
+                price = close_hoy
+            print(f">>> Kraken 24h OK: {price} {change:.2f}%", flush=True)
+            return price, change
+    except Exception as e:
+        print(f">>> Error Kraken 24h: {e}", flush=True)
+
+    # 3. Fallback Binance si Kraken falla
     try:
         j = requests.get("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT", timeout=15, headers=headers).json()
-        change = float(j["priceChangePercent"])
+        print(f">>> Binance raw: {str(j)[:200]}", flush=True)
+        change = float(j.get("priceChangePercent", 0))
         if price is None:
-            price = float(j["lastPrice"])
-        print(f">>> Binance OK: {price} {change:.2f}%", flush=True)
-        return price, change
+            price = float(j.get("lastPrice", 0))
+        if price:
+            return price, change
     except Exception as e:
         print(f">>> Error Binance: {e}", flush=True)
-
-    # 3. Si todo falla, intenta CoinGecko por ultimo
-    try:
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true"
-        r = requests.get(url, timeout=15, headers=headers)
-        j = r.json()
-        if "bitcoin" in j:
-            p = float(j["bitcoin"]["usd"])
-            c = float(j["bitcoin"].get("usd_24h_change", 0))
-            if price is None: price = p
-            if c!= 0: change = c
-            return price, change
-    except: pass
 
     return price, change
 
