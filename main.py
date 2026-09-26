@@ -378,7 +378,19 @@ def job_15dias():
     def fmt(c):
         return f"{'📈' if c>=0 else '📉'} {c:+.2f}%"
     path, rsi_30d, min_30d, max_30d, ma20, patrones_30d = build_chart_30d_1d_pro()
-    rsi_txt = f"{rsi_30d:.0f} {'🔥 Sobrecomprado' if rsi_30d>70 else '🧊 Sobreventa' if rsi_30d<30 else '⚖️ Neutral'}"
+        # --- CLASIFICACION RSI CORREGIDA - 5 ESTADOS ---
+    if rsi_30d > 70:
+        rsi_estado = "🔥 Sobrecomprado"
+    elif rsi_30d >= 68:
+        rsi_estado = "⚠️ Casi Sobrecompra"
+    elif rsi_30d < 30:
+        rsi_estado = "🧊 Sobreventa"
+    elif rsi_30d < 45:
+        rsi_estado = "⚖️ Neutral Bajista"
+    else:
+        rsi_estado = "⚖️ Neutral Alcista"
+        
+    rsi_txt = f"{rsi_30d:.0f} {rsi_estado}"
     rango_24h_min, rango_24h_max, _ = get_range_24h()
     rango_24h_txt = f"📊 Rango 24H: ${rango_24h_min:,.0f} - ${rango_24h_max:,.0f}" if rango_24h_min else "📊 Rango 24H: --"
     rango_30d_txt = f"📊 Rango 30D: ${min_30d:,.0f} - ${max_30d:,.0f}" if min_30d else "📊 Rango 30D: --"
