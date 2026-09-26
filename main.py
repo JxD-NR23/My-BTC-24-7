@@ -417,7 +417,20 @@ def job_daily(with_chart=False, chart_type="24h"):
     def fmt(c): return f"{'📈' if c>=0 else '📉'} {c:+.2f}%" # Funcion interna que formatea % con icono
 
     rsi_1d = calc_rsi(closes_diario) # RSI 1D exacto ahora
-    rsi_1d_txt = f"{rsi_1d:.0f} {'🔥 Sobrecomprado' if rsi_1d>70 else '🧊 Sobreventa' if rsi_1d<30 else '⚖️ Neutral'}"
+    
+    # --- CLASIFICACION RSI MEJORADA ---
+    if rsi_1d > 70:
+        rsi_1d_estado = "🔥 Sobrecomprado"
+    elif rsi_1d >= 68:
+        rsi_1d_estado = "⚠️ Casi Sobrecompra"
+    elif rsi_1d < 30:
+        rsi_1d_estado = "🧊 Sobreventa"
+    elif rsi_1d < 45:
+        rsi_1d_estado = "⚖️ Neutral Bajista"
+    else:
+        rsi_1d_estado = "⚖️ Neutral"
+    
+    rsi_1d_txt = f"{rsi_1d:.0f} {rsi_1d_estado}"
 
     min_24h, max_24h, candles_24h = get_range_24h() # Rango 24H que pediste
     rango_24h_txt = f"📊 Rango 24H: ${min_24h:,.0f} - ${max_24h:,.0f}" if min_24h else "📊 Rango 24H: --"
