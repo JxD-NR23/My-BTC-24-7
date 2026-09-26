@@ -19,6 +19,27 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import requests
+
+def corregir_ortografia(texto):
+    if not texto:
+        return texto
+    try:
+        r = requests.post("https://api.languagetool.org/v2/check",
+                          data={"text": texto, "language": "es-ES"},
+                          timeout=15)
+        data = r.json()
+        corregido = texto
+        # Aplicamos correcciones de atrás hacia adelante para no liar offsets
+        for m in reversed(data.get("matches", [])):
+            if m.get("replacements"):
+                repl = m["replacements"][0]["value"]
+                inicio = m["offset"]
+                largo = m["length"]
+                corregido = corregido[:inicio] + repl + corregido[inicio+largo:]
+        return corregido
+    except:
+        return texto
 
 # --- CONFIGURACION ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN","").strip()
@@ -51,6 +72,7 @@ def save_data(data):
 # --- TELEGRAM ---
 def send_text(msg, chat_id=None):
     try:
+        msg = corregir_ortografia(msg)
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         r = requests.post(url, json={"chat_id": chat_id or CHAT_ID, "text": msg, "parse_mode": "Markdown", "disable_web_page_preview": True}, timeout=20)
         print(f">>> Telegram {r.status_code}", flush=True)
@@ -61,6 +83,7 @@ def send_text(msg, chat_id=None):
 
 def send_photo(photo_path, caption="", chat_id=None):
     try:
+        caption = corregir_ortografia(caption)
         url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
         with open(photo_path, 'rb') as f:
             r = requests.post(url, data={"chat_id": chat_id or CHAT_ID, "caption": caption, "parse_mode": "Markdown"}, files={"photo": f}, timeout=30)
