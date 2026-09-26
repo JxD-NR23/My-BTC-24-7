@@ -367,10 +367,10 @@ def build_chart_30d_1d_pro():
     ax2.grid(alpha=0.3)
     ax2.set_title(f"RSI 1D: {estado} ({rsi:.1f})", color=rsi_color, fontweight='bold', fontsize=9)
 
-        plt.xticks(rotation=15); plt.tight_layout()
-        path = "/tmp/btc_30d_1d.png"
-        plt.savefig(path, dpi=150); plt.close()
-        print(">>> Grafico 30D 1D PRO OK", flush=True)
+    plt.xticks(rotation=15); plt.tight_layout()
+    path = "/tmp/btc_30d_1d.png"
+    plt.savefig(path, dpi=150); plt.close()
+    print(">>> Grafico 30D 1D PRO OK", flush=True)
 
         patrones = detect_pattern_30d_pro(closes, highs, lows, rsi)
 
