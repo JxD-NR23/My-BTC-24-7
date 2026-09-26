@@ -24,19 +24,41 @@ import requests
 def corregir_ortografia(texto):
     if not texto:
         return texto
+
+    # Palabras que aunque estén en minúsculas NO queremos que toque
+    WHITELIST = {"btc", "eth", "rsi", "fear", "greed", "green", "red"}
+
     try:
         r = requests.post("https://api.languagetool.org/v2/check",
                           data={"text": texto, "language": "es-ES"},
                           timeout=15)
         data = r.json()
         corregido = texto
-        # Aplicamos correcciones de atrás hacia adelante para no liar offsets
         for m in reversed(data.get("matches", [])):
-            if m.get("replacements"):
-                repl = m["replacements"][0]["value"]
-                inicio = m["offset"]
-                largo = m["length"]
-                corregido = corregido[:inicio] + repl + corregido[inicio+largo:]
+            if not m.get("replacements"):
+                continue
+
+            inicio = m["offset"]
+            largo = m["length"]
+            original = corregido[inicio:inicio+largo]
+            reemplazo = m["replacements"][0]["value"]
+
+            # FILTRO DEFINITIVO:
+            # 1. Solo corrige si es todo minúsculas (así ignora BTC, Fear, RSI, ETC)
+            if not original.islower():
+                continue
+            # 2. Solo letras (ignora $84,338, 24h, +0.29%)
+            if not original.isalpha():
+                continue
+            # 3. Mínimo 4 letras (ignora "24", "7d", etc)
+            if len(original) < 4:
+                continue
+            # 4. Si está en whitelist, lo salta
+            if original.lower() in WHITELIST:
+                continue
+
+            corregido = corregido[:inicio] + reemplazo + corregido[inicio+largo:]
+
         return corregido
     except:
         return texto
