@@ -343,9 +343,7 @@ def build_chart_30d_1d_pro():
         ax1.set_title(f"BTC 30D (1D) | Rango ${min_p:,.0f} - ${max_p:,.0f} | RSI {rsi:.1f}", fontsize=11, fontweight='bold')
         ax1.legend(); ax1.grid(alpha=0.3)
 
-        rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
-    
-    # --- COLOR DINAMICO DEL RSI ---
+            rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
     if rsi > 70:
         rsi_color = "red"
         estado = "SOBRECOMPRA 🔥"
@@ -353,22 +351,17 @@ def build_chart_30d_1d_pro():
         rsi_color = "orange"
         estado = "CASI SOBRECOMPRA ⚠️"
     elif rsi < 30:
-        rsi_color = "#0088ff" # azul
+        rsi_color = "#0088ff"
         estado = "SOBREVENTA 🧊"
     else:
         rsi_color = "purple"
         estado = "NEUTRAL"
-
-    # Dibuja la linea con el color que toca
     ax2.plot(times, rsi_hist, color=rsi_color, linewidth=2)
     ax2.axhline(70, color='red', linestyle='--', alpha=0.5)
     ax2.axhline(30, color='green', linestyle='--', alpha=0.5)
-
-    # Pinta las zonas de peligro en el fondo
     ax2.axhspan(68, 70, color='orange', alpha=0.15)
     ax2.axhspan(70, 100, color='red', alpha=0.15)
     ax2.axhspan(0, 30, color='blue', alpha=0.15)
-
     ax2.set_ylim(0,100)
     ax2.set_ylabel('RSI')
     ax2.grid(alpha=0.3)
