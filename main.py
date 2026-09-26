@@ -343,7 +343,7 @@ def build_chart_30d_1d_pro():
         ax1.set_title(f"BTC 30D (1D) | Rango ${min_p:,.0f} - ${max_p:,.0f} | RSI {rsi:.1f}", fontsize=11, fontweight='bold')
         ax1.legend(); ax1.grid(alpha=0.3)
 
-            rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
+    rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
     if rsi > 70:
         rsi_color = "red"
         estado = "SOBRECOMPRA 🔥"
