@@ -1,11 +1,11 @@
 # =================================================================================
 # LO QUE HACE ESTE BOT ENTERO EXPLICADO EN HUMANO:
 #
-# 1. 8:00 y 23:00 -> Mensaje + Grafico 24H en velas de 1H limpio (sin RSI ni medias)
-# 2. 13:00 y 18:00 -> Solo mensaje, sin grafico.
-# 3. Cada 15 dias a las 0:00 (dia 1 y 15) -> Mensaje + Grafico 30D en 1D con RSI, medias y patrones.
-# 4. Todos los mensajes llevan: ultimo aviso %, 24H %, 7D %, Rango 24H, RSI 1D, Sentimiento, Fecha España
-# 5. Comandos: /grafico te da opcion 1H o 1D
+# 1. 8:00 y 23:00 -> Mensaje + Gráfico 24H en velas de 1H limpio (sin RSI ni medias)
+# 2. 13:00 y 18:00 -> Solo mensaje, sin gráfico.
+# 3. Cada 15 días a las 0:00 (día 1 y 15) -> Mensaje + Gráfico 30D en 1D con RSI, medias y patrones.
+# 4. Todos los mensajes llevan: último aviso %, 24H %, 7D %, Rango 24H, RSI 1D, Sentimiento, Fecha España
+# 5. Comandos: /grafico te da opción 1H o 1D
 # =================================================================================
 
 import os
@@ -20,7 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# --- CONFIGURACION ---
+# --- CONFIGURACIÓN ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN","").strip()
 CHAT_ID = os.environ.get("CHAT_ID","").strip()
 TZ = ZoneInfo("Europe/Madrid")
@@ -33,7 +33,7 @@ KEYWORDS_ALTA_VOLATILIDAD = [
     "ban", "banea", "prohibe", "aprueba", "hack", "hackea", "crash", "guerra", "war"
 ]
 
-# --- MEMORIA ---
+# --- MEMORIA - Guarda el último precio para calcular % ---
 def load_data():
     try:
         with open(DATA_FILE, 'r') as f:
@@ -48,7 +48,7 @@ def save_data(data):
     except Exception as e:
         print(f">>> Error guardando data: {e}", flush=True)
 
-# --- TELEGRAM ---
+# --- TELEGRAM - Envía mensaje de texto ---
 def send_text(msg, chat_id=None):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -59,6 +59,7 @@ def send_text(msg, chat_id=None):
         print(f">>> ERROR Telegram: {e}", flush=True)
         return False
 
+# --- TELEGRAM - Envía foto con descripción ---
 def send_photo(photo_path, caption="", chat_id=None):
     try:
         url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
@@ -68,7 +69,7 @@ def send_photo(photo_path, caption="", chat_id=None):
     except Exception as e:
         print(f">>> Error foto: {e}", flush=True)
 
-# --- PRECIO ---
+# --- PRECIO - Obtiene precio, % 24H, % 7D y cierres diarios ---
 def get_price_full():
     price = None; change_24h = 0.0; change_7d = 0.0; closes = []
     try:
@@ -149,13 +150,13 @@ def detect_pattern_24h_simple(candles_24h):
             max_prev = max(highs[:-1])
             min_prev = min(lows[:-1])
             if closes[-1] > max_prev:
-                patrones.append(f"🚀 Rompiendo maximo 24H (${max_prev:,.0f})")
+                patrones.append(f"🚀 Rompiendo máximo 24H (${max_prev:,.0f})")
             if closes[-1] < min_prev:
-                patrones.append(f"💥 Perdiendo minimo 24H (${min_prev:,.0f})")
+                patrones.append(f"💥 Perdiendo mínimo 24H (${min_prev:,.0f})")
         if not patrones:
-            patrones.append("➡️ Sin patron relevante en 24H - Rango lateral")
+            patrones.append("➡️ Sin patrón relevante en 24H - Rango lateral")
     except:
-        patrones.append("Patron: --")
+        patrones.append("Patrón: --")
     return patrones
 
 def detect_pattern_30d_pro(closes, highs, lows, rsi):
@@ -181,11 +182,11 @@ def detect_pattern_30d_pro(closes, highs, lows, rsi):
         max_30 = max(highs[:-1])
         min_30 = min(lows[:-1])
         if closes[-1] > max_30:
-            patrones.append(f"🚀 Breakout 30D - Nuevo maximo ${max_30:,.0f}")
+            patrones.append(f"🚀 Breakout 30D - Nuevo máximo ${max_30:,.0f}")
         if closes[-1] < min_30:
-            patrones.append(f"💥 Breakdown 30D - Nuevo minimo ${min_30:,.0f}")
+            patrones.append(f"💥 Breakdown 30D - Nuevo mínimo ${min_30:,.0f}")
     if not patrones:
-        patrones.append("➡️ Sin patron relevante 30D")
+        patrones.append("➡️ Sin patrón relevante 30D")
     return patrones
 
 def build_chart_24h_1h_clean():
@@ -212,7 +213,7 @@ def build_chart_24h_1h_clean():
         plt.xticks(rotation=20); plt.tight_layout()
         path = "/tmp/btc_24h_1h.png"
         plt.savefig(path, dpi=150); plt.close()
-        print(">>> Grafico 24H 1H limpio OK", flush=True)
+        print(">>> Gráfico 24H 1H limpio OK", flush=True)
 
         patrones = detect_pattern_24h_simple(ohlc)
         return path, min_p, max_p, patrones, ohlc
@@ -220,7 +221,7 @@ def build_chart_24h_1h_clean():
         print(f">>> Error chart 24H 1H: {e}", flush=True)
         return None, 0, 0, [], []
 
-# --- BLOQUE CORREGIDO - AQUI ESTABA EL ERROR ---
+# --- BLOQUE CORREGIDO - AQUÍ ESTABA EL ERROR ---
 def build_chart_30d_1d_pro():
     try:
         url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440"
@@ -251,7 +252,7 @@ def build_chart_30d_1d_pro():
         ax1.set_title(f"BTC 30D (1D) | Rango ${min_p:,.0f} - ${max_p:,.0f} | RSI {rsi:.1f}", fontsize=11, fontweight='bold')
         ax1.legend(); ax1.grid(alpha=0.3)
 
-        # --- COLOR DINAMICO RSI - CORREGIDO ---
+        # --- COLOR DINÁMICO RSI - CORREGIDO ---
         rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
         if rsi > 70:
             rsi_color = "red"
@@ -280,7 +281,7 @@ def build_chart_30d_1d_pro():
         plt.xticks(rotation=15); plt.tight_layout()
         path = "/tmp/btc_30d_1d.png"
         plt.savefig(path, dpi=150); plt.close()
-        print(">>> Grafico 30D 1D PRO OK", flush=True)
+        print(">>> Gráfico 30D 1D PRO OK", flush=True)
 
         patrones = detect_pattern_30d_pro(closes, highs, lows, rsi)
         return path, rsi, min_p, max_p, ma20[-1], patrones
@@ -316,7 +317,7 @@ def job_daily(with_chart=False, chart_type="24h"):
     print(f">>> job_daily INICIADO chart={with_chart} type={chart_type} {datetime.now(TZ)}", flush=True)
     price, change24, change7, closes_diario = get_price_full()
     if not price:
-        send_text("⚠️ Bot BTC: API caida")
+        send_text("⚠️ Bot BTC: API caída")
         return
     data = load_data()
     last_aviso = data.get("last_aviso_price", price)
@@ -357,7 +358,7 @@ def job_daily(with_chart=False, chart_type="24h"):
         chart_path = path
         patrones = pat
         if patrones:
-            msg += f"\n🔍 *Patron 24H:*\n\n" + "\n\n".join([f"• {p}" for p in patrones]) + "\n"
+            msg += f"\n🔍 *Patrón 24H:*\n\n" + "\n\n".join([f"• {p}" for p in patrones]) + "\n"
     send_text(msg)
     if with_chart and chart_path:
         send_photo(chart_path, f"📊 BTC 24H (1H) ${price:,.2f} | {rango_24h_txt}")
@@ -370,7 +371,7 @@ def job_15dias():
     print(f">>> job_15dias INICIADO {datetime.now(TZ)}", flush=True)
     price, change24, change7, closes_diario = get_price_full()
     if not price:
-        send_text("⚠️ Bot BTC: API caida reporte 15 dias")
+        send_text("⚠️ Bot BTC: API caída reporte 15 días")
         return
     data = load_data()
     last_aviso = data.get("last_aviso_price", price)
@@ -378,7 +379,7 @@ def job_15dias():
     def fmt(c):
         return f"{'📈' if c>=0 else '📉'} {c:+.2f}%"
     path, rsi_30d, min_30d, max_30d, ma20, patrones_30d = build_chart_30d_1d_pro()
-        # --- CLASIFICACION RSI CORREGIDA - 5 ESTADOS ---
+        # --- CLASIFICACIÓN RSI CORREGIDA - 5 ESTADOS ---
     if rsi_30d > 70:
         rsi_estado = "🔥 Sobrecomprado"
     elif rsi_30d >= 68:
@@ -389,7 +390,7 @@ def job_15dias():
         rsi_estado = "⚖️ Neutral Bajista"
     else:
         rsi_estado = "⚖️ Neutral Alcista"
-        
+
     rsi_txt = f"{rsi_30d:.0f} {rsi_estado}"
     rango_24h_min, rango_24h_max, _ = get_range_24h()
     rango_24h_txt = f"📊 Rango 24H: ${rango_24h_min:,.0f} - ${rango_24h_max:,.0f}" if rango_24h_min else "📊 Rango 24H: --"
@@ -397,7 +398,7 @@ def job_15dias():
     sentiment = get_sentiment_week()
     price_big = f"💰 *₿ BTC ${price:,.2f}* 💰"
     msg = (
-        f"📅 *REPORTE CADA 15 DIAS - 30D*\n\n"
+        f"📅 *REPORTE CADA 15 DÍAS - 30D*\n\n"
         f"{price_big}\n"
         f"━━━━━━━━━━━━━━\n\n"
         f"🔄 Último aviso: {fmt(change_aviso)}\n\n"
@@ -406,7 +407,7 @@ def job_15dias():
         f"{rango_24h_txt}\n\n"
         f"{rango_30d_txt}\n\n"
         f"📈 RSI 1D: {rsi_txt}\n\n"
-        f"🔍 *Analisis 30D:*\n\n" + "\n\n".join([f"• {p}" for p in patrones_30d]) + "\n\n"
+        f"🔍 *Análisis 30D:*\n\n" + "\n\n".join([f"• {p}" for p in patrones_30d]) + "\n\n"
         f"{sentiment}\n\n"
         f"📅 {datetime.now(TZ).strftime('%d/%m/%Y %H:%M')} España\n"
     )
@@ -478,10 +479,10 @@ def webhook():
         if "/start" in text or "/help" in text:
             send_text(
                 "🤖 *Ferrari Bot v5 FINAL*\n\n"
-                "*Avisos automaticos:*\n\n"
-                "8:00 y 23:00 -> Mensaje + Grafico 24H (1H limpio) + patron\n\n"
+                "*Avisos automáticos:*\n\n"
+                "8:00 y 23:00 -> Mensaje + Gráfico 24H (1H limpio) + patrón\n\n"
                 "13:00 y 18:00 -> Solo mensaje\n\n"
-                "Dia 1 y 15 a las 0:00 -> Mensaje + Grafico 30D (1D) con RSI, medias y patron\n\n"
+                "Día 1 y 15 a las 0:00 -> Mensaje + Gráfico 30D (1D) con RSI, medias y patrón\n\n"
                 "*Comandos:*\n\n"
                 "/precio\n\n"
                 "/grafico -> elige 1H o 1D\n\n"
@@ -502,10 +503,10 @@ def webhook():
 
         elif text.strip() == "/grafico":
             send_text(
-                "📊 *¿Que grafico quieres?*\n\n"
+                "📊 *¿Qué gráfico quieres?*\n\n"
                 "/grafico1h -> 24H en velas 1H limpio\n\n"
-                "/grafico1d -> 30D en velas 1D con rango, RSI, cruce medias y patron\n\n"
-                "Auto: 8 y 23h -> 1H limpio, dia 1 y 15 0:00 -> 30D pro",
+                "/grafico1d -> 30D en velas 1D con rango, RSI, cruce medias y patrón\n\n"
+                "Auto: 8 y 23h -> 1H limpio, día 1 y 15 0:00 -> 30D pro",
                 chat_id=chat_id)
 
         elif "grafico1h" in text:
@@ -515,7 +516,7 @@ def webhook():
                 txt_pat = "\n\n".join(patrones)
                 send_photo(path, f"BTC 24H (1H) ${p:,.2f}\n\nRango ${min_p:,.0f}-${max_p:,.0f}\n\n{txt_pat}", chat_id=chat_id)
             else:
-                send_text("Error grafico 1H", chat_id=chat_id)
+                send_text("Error gráfico 1H", chat_id=chat_id)
 
         elif "grafico1d" in text or "grafico30d" in text:
             p,_,_,_ = get_price_full()
@@ -524,7 +525,7 @@ def webhook():
                 txt_pat = "\n\n".join(patrones)
                 send_photo(path, f"BTC 30D (1D) ${p:,.2f} RSI {rsi:.0f}\n\nRango ${min_p:,.0f}-${max_p:,.0f}\n\n{txt_pat}", chat_id=chat_id)
             else:
-                send_text("Error grafico 30D", chat_id=chat_id)
+                send_text("Error gráfico 30D", chat_id=chat_id)
 
         elif "grafico" in text:
             send_text("Escribe /grafico para elegir 1H o 1D", chat_id=chat_id)
@@ -577,7 +578,7 @@ scheduler.add_job(job_15dias, 'cron', day='1,15', hour=0, minute=0, id="cada15di
 scheduler.add_job(check_volatility, 'interval', minutes=5, id="vol")
 scheduler.add_job(check_news_job, 'interval', minutes=10, id="news")
 scheduler.start()
-print(">>> Scheduler v5 FINAL: 8(24H),13,18,23(24H) + cada 15 dias 0:00 30D + vol 5m + news 10m", flush=True)
+print(">>> Scheduler v5 FINAL: 8(24H),13,18,23(24H) + cada 15 días 0:00 30D + vol 5m + news 10m", flush=True)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
