@@ -25,8 +25,7 @@ def corregir_ortografia(texto):
     if not texto:
         return texto
 
-    # Palabras que aunque estén en minúsculas NO queremos que toque
-    WHITELIST = {"btc", "eth", "rsi", "fear", "greed", "green", "red"}
+    WHITELIST = {"btc", "eth", "rsi", "fear", "greed", "green", "red", "greed"}
 
     try:
         r = requests.post("https://api.languagetool.org/v2/check",
@@ -43,19 +42,21 @@ def corregir_ortografia(texto):
             original = corregido[inicio:inicio+largo]
             reemplazo = m["replacements"][0]["value"]
 
-            # FILTRO DEFINITIVO:
-            # 1. Solo corrige si es todo minúsculas (así ignora BTC, Fear, RSI, ETC)
-            if not original.islower():
+            # 1. Si es TODO en mayúsculas (BTC, RSI, 24H) -> NO TOCAR
+            if original.isupper():
                 continue
-            # 2. Solo letras (ignora $84,338, 24h, +0.29%)
-            if not original.isalpha():
+            # 2. Si tiene números o símbolos ($, %, /) -> NO TOCAR
+            if any(c.isdigit() or c in "$%/" for c in original):
                 continue
-            # 3. Mínimo 4 letras (ignora "24", "7d", etc)
-            if len(original) < 4:
-                continue
-            # 4. Si está en whitelist, lo salta
+            # 3. Si son solo letras y está en whitelist -> NO TOCAR
             if original.lower() in WHITELIST:
                 continue
+            if not original.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").isalpha():
+                continue
+
+            # 4. Mantener la mayúscula inicial si la tenía
+            if original[0].isupper():
+                reemplazo = reemplazo[0].upper() + reemplazo[1:]
 
             corregido = corregido[:inicio] + reemplazo + corregido[inicio+largo:]
 
