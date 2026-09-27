@@ -19,50 +19,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import requests
-
-def corregir_ortografia(texto):
-    if not texto:
-        return texto
-
-    WHITELIST = {"btc", "eth", "rsi", "fear", "greed", "green", "red", "greed"}
-
-    try:
-        r = requests.post("https://api.languagetool.org/v2/check",
-                          data={"text": texto, "language": "es-ES"},
-                          timeout=15)
-        data = r.json()
-        corregido = texto
-        for m in reversed(data.get("matches", [])):
-            if not m.get("replacements"):
-                continue
-
-            inicio = m["offset"]
-            largo = m["length"]
-            original = corregido[inicio:inicio+largo]
-            reemplazo = m["replacements"][0]["value"]
-
-            # 1. Si es TODO en mayúsculas (BTC, RSI, 24H) -> NO TOCAR
-            if original.isupper():
-                continue
-            # 2. Si tiene números o símbolos ($, %, /) -> NO TOCAR
-            if any(c.isdigit() or c in "$%/" for c in original):
-                continue
-            # 3. Si son solo letras y está en whitelist -> NO TOCAR
-            if original.lower() in WHITELIST:
-                continue
-            if not original.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u").isalpha():
-                continue
-
-            # 4. Mantener la mayúscula inicial si la tenía
-            if original[0].isupper():
-                reemplazo = reemplazo[0].upper() + reemplazo[1:]
-
-            corregido = corregido[:inicio] + reemplazo + corregido[inicio+largo:]
-
-        return corregido
-    except:
-        return texto
 
 # --- CONFIGURACION ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN","").strip()
@@ -95,7 +51,6 @@ def save_data(data):
 # --- TELEGRAM ---
 def send_text(msg, chat_id=None):
     try:
-        msg = corregir_ortografia(msg)
         url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
         r = requests.post(url, json={"chat_id": chat_id or CHAT_ID, "text": msg, "parse_mode": "Markdown", "disable_web_page_preview": True}, timeout=20)
         print(f">>> Telegram {r.status_code}", flush=True)
@@ -106,7 +61,6 @@ def send_text(msg, chat_id=None):
 
 def send_photo(photo_path, caption="", chat_id=None):
     try:
-        caption = corregir_ortografia(caption)
         url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
         with open(photo_path, 'rb') as f:
             r = requests.post(url, data={"chat_id": chat_id or CHAT_ID, "caption": caption, "parse_mode": "Markdown"}, files={"photo": f}, timeout=30)
