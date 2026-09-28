@@ -6,6 +6,7 @@
 # 3. Cada 15 días a las 0:00 (día 1 y 15) -> Mensaje + Gráfico 30D en 1D con RSI, medias y patrones.
 # 4. Todos los mensajes llevan: último aviso %, 24H %, 7D %, Rango 24H, RSI 1D, Sentimiento, Fecha España
 # 5. Comandos: /grafico te da opción 1H o 1D
+# PATCH v5.1: fix indent + MA incluye hoy + 60 velas para MA50 + volatility siempre guarda + workers 1
 # =================================================================================
 
 import os
@@ -121,7 +122,7 @@ def get_sentiment_week():
         d = requests.get("https://api.alternative.me/fng/?limit=7", timeout=10).json()['data']
         hoy = int(d[0]['value']); hace7 = int(d[6]['value']); diff = hoy - hace7
         emoji="😱" if hoy<25 else "😨" if hoy<45 else "😐" if hoy<55 else "🤑" if hoy<75 else "🤩"
-        tendencia = "🔼 sube" if diff>5 else "🔽 baja" if diff<-5 else "➡️ estable"
+        tendencia = "🔼 sube" if diff>5 else "🔽 baja" if diff<-5 else "➡ estable"
         return f"{emoji} *Fear & Greed {hoy}/100* ({d[0]['value_classification']})\n\nHace 7d: {hace7}/100 ({tendencia} {diff:+d})"
     except:
         return "Sentimiento: --"
@@ -154,7 +155,7 @@ def detect_pattern_24h_simple(candles_24h):
             if closes[-1] < min_prev:
                 patrones.append(f"💥 Perdiendo mínimo 24H (${min_prev:,.0f})")
         if not patrones:
-            patrones.append("➡️ Sin patrón relevante en 24H - Rango lateral")
+            patrones.append("➡ Sin patrón relevante en 24H - Rango lateral")
     except:
         patrones.append("Patrón: --")
     return patrones
@@ -177,7 +178,7 @@ def detect_pattern_30d_pro(closes, highs, lows, rsi):
         if ma20_prev <= ma50_prev and ma20 > ma50:
             patrones.append("✨ Cruce dorado - MA20 cruza por encima MA50")
         if ma20_prev >= ma50_prev and ma20 < ma50:
-            patrones.append("⚠️ Cruce de muerte - MA20 cruza por debajo MA50")
+            patrones.append("⚠ Cruce de muerte - MA20 cruza por debajo MA50")
     if len(closes) >= 30:
         max_30 = max(highs[:-1])
         min_30 = min(lows[:-1])
@@ -186,7 +187,7 @@ def detect_pattern_30d_pro(closes, highs, lows, rsi):
         if closes[-1] < min_30:
             patrones.append(f"💥 Breakdown 30D - Nuevo mínimo ${min_30:,.0f}")
     if not patrones:
-        patrones.append("➡️ Sin patrón relevante 30D")
+        patrones.append("➡ Sin patrón relevante 30D")
     return patrones
 
 def build_chart_24h_1h_clean():
@@ -221,21 +222,35 @@ def build_chart_24h_1h_clean():
         print(f">>> Error chart 24H 1H: {e}", flush=True)
         return None, 0, 0, [], []
 
-# --- BLOQUE CORREGIDO - AQUÍ ESTABA EL ERROR ---
+# --- BLOQUE CORREGIDO v5.1 - FIX MA + 60 VELAS ---
 def build_chart_30d_1d_pro():
     try:
         url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440"
         data = requests.get(url, timeout=15).json()
-        ohlc = list(data["result"]["XXBTZUSD"])[-30:]
+        ohlc_all = list(data["result"]["XXBTZUSD"])[-60:]  # FIX: 60 para poder calcular MA50
+        if len(ohlc_all) < 30:
+            raise ValueError("No hay suficientes velas")
+        
+        # Datos completos para calculos
+        closes_all = [float(x[4]) for x in ohlc_all]
+        highs_all = [float(x[2]) for x in ohlc_all]
+        lows_all = [float(x[3]) for x in ohlc_all]
+        
+        # Solo ultimos 30 para visualizacion
+        ohlc = ohlc_all[-30:]
         times = [datetime.fromtimestamp(int(x[0]), tz=TZ) for x in ohlc]
         closes = [float(x[4]) for x in ohlc]
         highs = [float(x[2]) for x in ohlc]
         lows = [float(x[3]) for x in ohlc]
         opens = [float(x[1]) for x in ohlc]
 
-        ma20 = [sum(closes[i-20:i])/20 if i>=20 else None for i in range(len(closes))]
-        ma50 = [sum(closes[i-50:i])/50 if i>=50 else None for i in range(len(closes))] if len(closes)>=50 else [None]*len(closes)
-        rsi = calc_rsi(closes)
+        # FIX: MA ahora incluye el dia de hoy (i-19:i+1)
+        ma20_all = [sum(closes_all[i-19:i+1])/20 if i>=19 else None for i in range(len(closes_all))]
+        ma50_all = [sum(closes_all[i-49:i+1])/50 if i>=49 else None for i in range(len(closes_all))]
+        ma20 = ma20_all[-30:]
+        ma50 = ma50_all[-30:]
+
+        rsi = calc_rsi(closes_all)  # RSI sobre historico completo
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10,6), gridspec_kw={'height_ratios':[3,1]})
 
@@ -252,14 +267,14 @@ def build_chart_30d_1d_pro():
         ax1.set_title(f"BTC 30D (1D) | Rango ${min_p:,.0f} - ${max_p:,.0f} | RSI {rsi:.1f}", fontsize=11, fontweight='bold')
         ax1.legend(); ax1.grid(alpha=0.3)
 
-        # --- COLOR DINÁMICO RSI - CORREGIDO ---
-        rsi_hist = [calc_rsi(closes[:i+1]) for i in range(len(closes))]
+        # --- COLOR DINÁMICO RSI ---
+        rsi_hist = [calc_rsi(closes_all[:i+1]) for i in range(len(closes_all))][-30:]
         if rsi > 70:
             rsi_color = "red"
             estado = "SOBRECOMPRA 🔥"
         elif rsi >= 68:
             rsi_color = "orange"
-            estado = "CASI SOBRECOMPRA ⚠️"
+            estado = "CASI SOBRECOMPRA ⚠"
         elif rsi < 30:
             rsi_color = "#0088ff"
             estado = "SOBREVENTA 🧊"
@@ -281,10 +296,11 @@ def build_chart_30d_1d_pro():
         plt.xticks(rotation=15); plt.tight_layout()
         path = "/tmp/btc_30d_1d.png"
         plt.savefig(path, dpi=150); plt.close()
-        print(">>> Gráfico 30D 1D PRO OK", flush=True)
+        print(">>> Gráfico 30D 1D PRO OK v5.1", flush=True)
 
-        patrones = detect_pattern_30d_pro(closes, highs, lows, rsi)
-        return path, rsi, min_p, max_p, ma20[-1], patrones
+        patrones = detect_pattern_30d_pro(closes_all, highs_all, lows_all, rsi)
+        ma20_last = ma20[-1] if ma20[-1] is not None else 0
+        return path, rsi, min_p, max_p, ma20_last, patrones
     except Exception as e:
         print(f">>> Error chart 30D 1D: {e}", flush=True)
         return None, 50, 0, 0, 0, []
@@ -317,7 +333,7 @@ def job_daily(with_chart=False, chart_type="24h"):
     print(f">>> job_daily INICIADO chart={with_chart} type={chart_type} {datetime.now(TZ)}", flush=True)
     price, change24, change7, closes_diario = get_price_full()
     if not price:
-        send_text("⚠️ Bot BTC: API caída")
+        send_text("⚠ Bot BTC: API caída")
         return
     data = load_data()
     last_aviso = data.get("last_aviso_price", price)
@@ -328,13 +344,13 @@ def job_daily(with_chart=False, chart_type="24h"):
     if rsi_1d > 70:
         rsi_1d_estado = "🔥 Sobrecomprado"
     elif rsi_1d >= 68:
-        rsi_1d_estado = "⚠️ Casi Sobrecompra"
+        rsi_1d_estado = "⚠ Casi Sobrecompra"
     elif rsi_1d < 30:
         rsi_1d_estado = "🧊 Sobreventa"
     elif rsi_1d < 45:
-        rsi_1d_estado = "⚖️ Neutral Bajista"
+        rsi_1d_estado = "⚖ Neutral Bajista"
     else:
-        rsi_1d_estado = "⚖️ Neutral"
+        rsi_1d_estado = "⚖ Neutral"
     rsi_1d_txt = f"{rsi_1d:.0f} {rsi_1d_estado}"
     min_24h, max_24h, candles_24h = get_range_24h()
     rango_24h_txt = f"📊 Rango 24H: ${min_24h:,.0f} - ${max_24h:,.0f}" if min_24h else "📊 Rango 24H: --"
@@ -371,7 +387,7 @@ def job_15dias():
     print(f">>> job_15dias INICIADO {datetime.now(TZ)}", flush=True)
     price, change24, change7, closes_diario = get_price_full()
     if not price:
-        send_text("⚠️ Bot BTC: API caída reporte 15 días")
+        send_text("⚠ Bot BTC: API caída reporte 15 días")
         return
     data = load_data()
     last_aviso = data.get("last_aviso_price", price)
@@ -379,17 +395,17 @@ def job_15dias():
     def fmt(c):
         return f"{'📈' if c>=0 else '📉'} {c:+.2f}%"
     path, rsi_30d, min_30d, max_30d, ma20, patrones_30d = build_chart_30d_1d_pro()
-        # --- CLASIFICACIÓN RSI CORREGIDA - 5 ESTADOS ---
+    # --- CLASIFICACIÓN RSI CORREGIDA - 5 ESTADOS - FIX INDENT ---
     if rsi_30d > 70:
         rsi_estado = "🔥 Sobrecomprado"
     elif rsi_30d >= 68:
-        rsi_estado = "⚠️ Casi Sobrecompra"
+        rsi_estado = "⚠ Casi Sobrecompra"
     elif rsi_30d < 30:
         rsi_estado = "🧊 Sobreventa"
     elif rsi_30d < 45:
-        rsi_estado = "⚖️ Neutral Bajista"
+        rsi_estado = "⚖ Neutral Bajista"
     else:
-        rsi_estado = "⚖️ Neutral Alcista"
+        rsi_estado = "⚖ Neutral Alcista"
 
     rsi_txt = f"{rsi_30d:.0f} {rsi_estado}"
     rango_24h_min, rango_24h_max, _ = get_range_24h()
@@ -422,16 +438,16 @@ def job_15dias():
 def check_volatility():
     data = load_data(); last = data.get("last_price",0)
     price, c24, _, _ = get_price_full()
-    if not price or not last:
+    if not price:
+        return
+    if not last:
         data["last_price"]=price; save_data(data); return
     change = ((price-last)/last*100)
     if abs(change) >= 5:
         signo = "🚀 SUBIDÓN" if change>0 else "💥 CRASH"
-        send_text(f"⚠️ *ALERTA VOLATILIDAD {signo}*\n\n₿ BTC ${price:,.2f} ({change:+.2f}% en 5 min)")
-        data["last_price"]=price; save_data(data)
-    else:
-        if abs(change) > 0.5:
-            data["last_price"]=price; save_data(data)
+        send_text(f"⚠ *ALERTA VOLATILIDAD {signo}*\n\n₿ BTC ${price:,.2f} ({change:+.2f}% en 5 min)")
+    # FIX v5.1: siempre guarda el precio para no quedarse desactualizado
+    data["last_price"]=price; save_data(data)
 
 def check_custom_alerts(current_price):
     data = load_data(); alerts = data.get("alerts",[]); restantes = []
@@ -450,11 +466,11 @@ def check_news_job():
     news = get_filtered_news()
     for n in news[:1]:
         title = n.get('title',''); url = n.get('url','')
-        send_text(f"🗞️ *NOTICIA DE ALTO IMPACTO BTC*\n\n{title}\n\n{url}")
+        send_text(f"🗞 *NOTICIA DE ALTO IMPACTO BTC*\n\n{title}\n\n{url}")
 
 @app.route('/')
 def home():
-    return f"Bot running! Token:{bool(TOKEN)} Chat:{bool(CHAT_ID)}"
+    return f"Bot running v5.1! Token:{bool(TOKEN)} Chat:{bool(CHAT_ID)}"
 
 @app.route('/test')
 def test():
@@ -478,7 +494,7 @@ def webhook():
 
         if "/start" in text or "/help" in text:
             send_text(
-                "🤖 *Ferrari Bot v5 FINAL*\n\n"
+                "🤖 *Ferrari Bot v5.1 FINAL*\n\n"
                 "*Avisos automáticos:*\n\n"
                 "8:00 y 23:00 -> Mensaje + Gráfico 24H (1H limpio) + patrón\n\n"
                 "13:00 y 18:00 -> Solo mensaje\n\n"
@@ -549,7 +565,7 @@ def webhook():
 
         elif "borraralertas" in text:
             d=load_data(); d["alerts"]=[a for a in d["alerts"] if a.get("chat_id")!=chat_id]; save_data(d)
-            send_text("🗑️ Alertas borradas", chat_id=chat_id)
+            send_text("🗑 Alertas borradas", chat_id=chat_id)
 
         elif "sentimiento" in text:
             send_text(get_sentiment_week(), chat_id=chat_id)
@@ -559,7 +575,7 @@ def webhook():
             if not n:
                 send_text("No hay noticias de alto impacto ahora", chat_id=chat_id)
             else:
-                send_text(f"🗞️ {n[0]['title']}\n\n{n[0]['url']}", chat_id=chat_id)
+                send_text(f"🗞 {n[0]['title']}\n\n{n[0]['url']}", chat_id=chat_id)
 
         else:
             p,c24,_,_ = get_price_full()
@@ -578,7 +594,7 @@ scheduler.add_job(job_15dias, 'cron', day='1,15', hour=0, minute=0, id="cada15di
 scheduler.add_job(check_volatility, 'interval', minutes=5, id="vol")
 scheduler.add_job(check_news_job, 'interval', minutes=10, id="news")
 scheduler.start()
-print(">>> Scheduler v5 FINAL: 8(24H),13,18,23(24H) + cada 15 días 0:00 30D + vol 5m + news 10m", flush=True)
+print(">>> Scheduler v5.1 FINAL: 8(24H),13,18,23(24H) + cada 15 días 0:00 30D + vol 5m + news 10m FIX MA+indent", flush=True)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
