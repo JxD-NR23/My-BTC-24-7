@@ -400,11 +400,11 @@ def job_15dias():
         return f"{'📈' if c>=0 else '📉'} {c:+.2f}%"
     path, rsi_30d, min_30d, max_30d, ma20, patrones_30d = build_chart_30d_1d_pro()
     # --- CLASIFICACIÓN RSI CORREGIDA - 5 ESTADOS - FIX INDENT ---
-    if rsi_1d > 70:
+    if rsi_1d >= 70:
         rsi_1d_estado = "🔥 Sobrecomprado"
     elif rsi_1d >= 68:
         rsi_1d_estado = "⚠ Casi Sobrecompra"
-    elif rsi_1d < 30:
+    elif rsi_1d <= 30:
         rsi_1d_estado = "🧊 Sobreventa"
     elif rsi_1d <= 32:
         rsi_1d_estado = "⚠ Casi Sobreventa"
