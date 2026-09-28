@@ -401,19 +401,19 @@ def job_15dias():
     path, rsi_30d, min_30d, max_30d, ma20, patrones_30d = build_chart_30d_1d_pro()
     # --- CLASIFICACIÓN RSI CORREGIDA - 5 ESTADOS - FIX INDENT ---
     if rsi_30d >= 70:
-        rsi_30d_estado = "🔥 Sobrecomprado"
+        rsi_estado = "🔥 Sobrecomprado"
     elif rsi_30d >= 68:
-        rsi_30d_estado = "⚠ Casi Sobrecompra"
+        rsi_estado = "⚠ Casi Sobrecompra"
     elif rsi_30d <= 30:
-        rsi_30d_estado = "🧊 Sobreventa"
+        rsi_estado = "🧊 Sobreventa"
     elif rsi_30d <= 32:
-        rsi_30d_estado = "⚠ Casi Sobreventa"
+        rsi_estado = "⚠ Casi Sobreventa"
     elif rsi_30d > 55:
-        rsi_30d_estado = "⚖ Neutral Alcista"
+        rsi_estado = "⚖ Neutral Alcista"
     elif rsi_30d < 45:
-        rsi_30d_estado = "⚖ Neutral Bajista"
+        rsi_estado = "⚖ Neutral Bajista"
     else:
-        rsi_30d_estado = "⚖ Neutral"
+        rsi_estado = "⚖ Neutral"
 
     rsi_txt = f"{rsi_30d:.0f} {rsi_estado}"
     rango_24h_min, rango_24h_max, _ = get_range_24h()
