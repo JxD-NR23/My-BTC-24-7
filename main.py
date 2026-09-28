@@ -341,11 +341,11 @@ def job_daily(with_chart=False, chart_type="24h"):
     def fmt(c):
         return f"{'📈' if c>=0 else '📉'} {c:+.2f}%"
     rsi_1d = calc_rsi(closes_diario)
-    if rsi_1d > 70:
+    if rsi_1d >= 70:
         rsi_1d_estado = "🔥 Sobrecomprado"
     elif rsi_1d >= 68:
         rsi_1d_estado = "⚠ Casi Sobrecompra"
-    elif rsi_1d < 30:
+    elif rsi_1d <= 30:
         rsi_1d_estado = "🧊 Sobreventa"
     elif rsi_1d <= 32:
         rsi_1d_estado = "⚠ Casi Sobreventa"
